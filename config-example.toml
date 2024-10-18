@@ -1,0 +1,11 @@
+[dev]
+token = ""
+status = ""
+database = "dev.db"
+admins = []
+
+[prod]
+token = ""
+database = "prod.db"
+status = ""
+admins = []
