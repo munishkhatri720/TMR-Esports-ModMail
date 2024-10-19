@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from config import BotConfig
 from sqlalchemy.ext.asyncio import async_sessionmaker , create_async_engine , AsyncSession 
 import asyncio   
+from models import Base
 
 
 
@@ -27,16 +28,23 @@ class TmrModMail(commands.AutoShardedBot):
     def config(self) -> "BotConfig":
         return self._config
     
+    async def on_ready(self) -> None:
+        print(f"Logged in as {self.user.name} ID : {self.user.id}")
+        await self.tree.sync()
+    
     async def setup_hook(self) -> None:
         await self.connect_db()
         self.loop.create_task(self.load_cogs())
 
     async def load_cogs(self) -> None:
         await self.load_extension('cogs.modmail')
+        print(f"[-] Loaded all cogs.")
 
     async def connect_db(self) -> None:
-        self.engine = create_async_engine(self.config.database , echo=True)
+        self.engine = create_async_engine(self.config.database , echo=False)
         self.db_session = async_sessionmaker(bind=self.engine , class_=AsyncSession ,expire_on_commit=False)
+        async with self.engine.begin() as engine:
+            await engine.run_sync(Base.metadata.create_all)
 
 async def start_bot(config : "BotConfig") -> None:
     async with TmrModMail(config=config) as bot:
@@ -66,7 +74,9 @@ def main():
         asyncio.run(coro)
     except KeyboardInterrupt:
         print("Exit...")
-            
+
+if __name__ == "__main__":
+    main()            
 
 
 

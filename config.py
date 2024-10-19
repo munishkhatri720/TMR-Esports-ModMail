@@ -9,6 +9,8 @@ class BotConfig:
     status : str
     database : str
     admins : List[int]
+    forum_id : int
+    staff_role : int
 
 def load_config() -> BotConfig:
     with open('config.toml' , "rb") as file:

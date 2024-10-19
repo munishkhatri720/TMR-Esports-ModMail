@@ -4,37 +4,42 @@ from typing import List , Any , TYPE_CHECKING
 if TYPE_CHECKING:
     from main import TmrModMail
 
-class MutualGuildSelector(discord.ui.View):
-    def __init__(self, *, timeout: float | None = 90 , modmail_guilds : List[discord.Guild] ):
-        self.modmail_guilds = modmail_guilds
-        self.selected : discord.Guild | None = None
+class ModMailOpenView(discord.ui.View):
+    def __init__(self, *, timeout: float | None = 180):
         super().__init__(timeout=timeout)
-        for guild in self.modmail_guilds:
-            button : discord.ui.Button[Any] = discord.ui.Button(label=guild.name[:75] , style=discord.ButtonStyle.primary , custom_id=str(guild.id))
-            self.add_item(button)
-            self.children[-1].callback = partial(self.callback , button) # type: ignore
 
-    async def callback(self , interaction : discord.Interaction["TmrModMail"] , button : discord.ui.Button[Any]) -> None:
+    @discord.ui.button(label="Open ModMail Thread" , emoji="📨" , style=discord.ButtonStyle.red)
+    async def open_modmail_button(self , interaction : discord.Interaction["TmrModMail"] , button : discord.ui.Button[Any])  -> None:
+        await interaction.response.send_modal(ModMailModal(title="TMR ModMail" , timeout=90 , custom_id="modal"))
+
+class ModMailModal(discord.ui.Modal):
+    def __init__(self, *, title: str = ..., timeout: float | None = None, custom_id: str = ...) -> None:
+        super().__init__(title=title, timeout=timeout, custom_id=custom_id)
+        self.title_input = discord.ui.TextInput(label="Enter ModMail Topic" , style=discord.TextStyle.long , required=True)
+        self.topic_input = discord.ui.TextInput(label="Enter ModMail Description" , style=discord.TextStyle.paragraph , required=True)
+        self.add_item(self.title_input)
+        self.add_item(self.topic_input)
+
+    async def on_submit(self, interaction: discord.Interaction["TmrModMail"]) -> None:
+        title = self.title_input
+        topic = self.topic_input
         await interaction.response.defer()
-        assert button.custom_id
-        self.selected = interaction.client.get_guild(int(button.custom_id))
-        self.stop()
+        forum = interaction.client.get_channel(int(interaction.client.config.forum_id))
+        print(type(forum))
+        if not forum:
+            await interaction.followup.send(content="Failed to created modmail forum channel not found..." , ephemeral=True)
+        else:
+            try:
+                thread = await forum.create_thread(name=f"{interaction.user.name}-modmail")
+                await thread.send(content=f"<@&{int(interaction.client.config.staff_role)}>\n*User : {interaction.user.name} (ID : {interaction.user.id})\n* Subject : {title}\n* Reason : {topic}")
+                await interaction.followup.send(content="Created ModMail send messsage here you message will be automatically forwarded to modmail channel" , ephemeral=True)
+            except discord.HTTPException as e:
+                await interaction.response.send_message(content=f"Failed to create thread : {e[:1700]}" , ephemeral=True)
 
-class OpenModMailView(discord.ui.View):
-    def __init__(self, *, timeout: float | None = None):
-        super().__init__(timeout=timeout)
+                    
+    
+            
 
-    @discord.ui.button(label="Open ModMail Thread" , emoji="🎫" , style=discord.ButtonStyle.red , custom_id="thread:open")
-    async def open_modmail_thread(self , interaction : discord.Interaction["TmrModMail"] , button : discord.ui.Button[Any]) -> None:
-        pass
-
-class CloseModMailView(discord.ui.View):
-    def __init__(self, *, timeout: float | None = None):
-        super().__init__(timeout=timeout)
-
-    @discord.ui.button(label="Close ModMail Thread" , emoji="🚮" , style=discord.ButtonStyle.red , custom_id="thread:close")
-    async def close_modmail_thread(self , interaction : discord.Interaction["TmrModMail"] , button : discord.ui.Button[Any]) -> None:
-        pass    
 
 
 

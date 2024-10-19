@@ -6,12 +6,6 @@ from datetime import datetime , timezone
 class Base(DeclarativeBase):
     pass
 
-class ModMail(Base):
-    __tablename__ = "modmail"
-    id : Mapped[int] = mapped_column(Integer , primary_key=True , index=True)
-    enabled : Mapped[bool] = mapped_column(Boolean , default=True)
-    thread_id : Mapped[int] = mapped_column(Integer , default=None , nullable=True)
-    staff_role : Mapped[int] = mapped_column(Integer , default=None , nullable=True)
       
 class ModMailBlacklist(Base):
     __tablename__ = "modmailblacklist"

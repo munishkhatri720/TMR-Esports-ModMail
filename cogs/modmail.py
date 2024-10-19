@@ -4,10 +4,10 @@ if TYPE_CHECKING:
     from main import TmrModMail
 from discord.ext import commands  
 import discord  
-from sqlalchemy import select
-from models import Ticket as TicketModel , ModMailBlacklist as ModMailBlacklistModel , ModMail as ModMailModel
+from sqlalchemy import select , delete
+from models import Ticket as TicketModel , ModMailBlacklist as ModMailBlacklistModel 
 from discord import app_commands
-from .helpers import MutualGuildSelector , CloseModMailView
+from .helpers import ModMailOpenView
 from contextlib import suppress
 
 class ModMail(commands.Cog):
@@ -15,125 +15,78 @@ class ModMail(commands.Cog):
         super().__init__()
         self.bot = bot
 
+    async def getch_user(self , user_id : int) -> Optional[discord.User]:
+        try:
+            user = self.bot.get_user(user_id)
+            if not user:
+                user = await self.bot.fetch_user(user_id)
+            return user
+        except (discord.HTTPException , discord.Forbidden , discord.InvalidData , discord.NotFound):
+            return None    
+
+    # @commands.Cog.listener()
+    # async def on_command_error(self , ctx : commands.Context , error : commands.CommandError):
+    #     await ctx.reply(content=f"Panic!({error})")
+
     @commands.Cog.listener()
     async def on_message(self , message : discord.Message ) -> None:
-        if message.author.bot or message.guild:
+        if message.author.bot:
             return
         
-        async with self.bot.db_session() as session:
-            result = await session.execute(select(Ticket).where(Ticket.user_id == message.author.id))
-            tik = result.scalar_one_or_none()
-            if tik:
-                pass
-            else:
-                # create a new ticket
-                pass
+        if not message.guild:
+            async with self.bot.db_session() as session:
+                item = await session.execute(select(ModMailBlacklistModel).where(ModMailBlacklistModel.user_id == message.author.id))
+                bl_user = item.scalar_one_or_none()
+                if bl_user:
+                    print("[-] Ignoring message as user is blacklisted from the guild modmail.")
+                    return
+                result = await session.execute(select(TicketModel).where(TicketModel.user_id == message.author.id))
+                ticket = result.scalar_one_or_none()
+                if ticket:
+                    print("[-] Ticket already exists forwarding user message...")
+                    channel = self.bot.get_channel(ticket.thread_id)
+                    if channel:
+                        print("[-] Forwarded user message to the ticket...")
+                        await channel.send(content=f"**{message.author.name} Said:\n**{message.content[:1800]}", file= message.attachments[0].to_file() if message.attachments else None , allowed_mentions=discord.AllowedMentions.none())  
+                else:
+                    print("[-] Send panel to open modmail....")
+                    embed = discord.Embed(color=discord.Color.green())
+                    embed.title = f"{self.bot.get_channel(self.bot.config.forum_id).guild.name} ModMail"
+                    embed.description = f"Welcome, {message.author.mention}! You can use this menu to contact the staff members of the server.\n You may use this menu to report people or ask questions from the moderators.\n Keep in mind that abusing this may lead to punishments!"
+                    embed.set_footer(text="Click the button below to open a ticket !")
+                    await message.reply(embed=embed , view=ModMailOpenView(timeout=None))
+        else:
+            async with self.bot.db_session() as session:
+                result = await session.execute(select(TicketModel).where(TicketModel.thread_id == message.channel.id))
+                thread = result.scalar_one_or_none()
+                if thread:
+                    user = await self.getch_user(thread.user_id)
+                    if user:
+                        try:
+                            await user.send(content=f"**{message.guild.name} Staff Response:**\n {message.content[:1800]}" , file= message.attachments[0].to_file() if message.attachments else None)
+                        except discord.Forbidden as e:
+                            await message.reply(content=f"🔴 I'm unable to send this message to **{user.name}** : `{e}`")
+                    
+                            
+    
+                                           
+
     
     @commands.Cog.listener()
     async def on_member_remove(self , member : discord.Member) -> None:
-        pass
-
-    async def getch_channel(self , channel_id : int) -> Optional[discord.Thread]:
-        try:
-            channel = self.bot.get_channel(channel_id)
-            if not channel:
-                channel = await self.bot.fetch_channel(channel_id)
-            return channel
-        except discord.Forbidden:
-            return None
-        except discord.HTTPException:
-            return None
-        except discord.NotFound:
-            return None    
-
-    @commands.hybrid_command(name="close-modmail")   
-    @commands.cooldown(1 , 4, commands.BucketType.user)
-    @app_commands.allowed_contexts(guilds=False , dms=True)
-    async def close_mymodmail(self , ctx : commands.Context["TmrModMail"]) -> None:
-        """Close any opened modmail thread."""
-        await ctx.defer()
         async with self.bot.db_session() as session:
-            result = await session.execute(select(TicketModel).where(TicketModel.user_id == ctx.author.id))
-            items = result.scalars().all()
-            mutuals = [g for g in ctx.author.mutual_guilds if g.id in [item.guild_id for item in items]]
-        if len(mutuals) == 0:
-            await ctx.reply(content="I have no mutual server with you so your all old threads got automatically closed.")
-            return    
-        view = MutualGuildSelector(timeout=45 , modmail_guilds=mutuals[:24])
-        message = await ctx.reply(content="Select any opened modmail for a server that you want to close :" , view=view)
-        await view.wait()
-        
-        with suppress(discord.HTTPException):
-                for child in view.children:
-                    if isinstance(child , discord.ui.Button):
-                        child.disabled = True
-                await message.edit(view=view)
-        if not view.selected:
-            return
-        else:
-            async with self.bot.db_session() as session:
-                result = await session.execute(select(TicketModel).where(TicketModel.guild_id == view.selected.id))
-                item = result.scalar_one_or_none()
-                if not item:
-                    await message.edit(view=None , content=f"No opened modmail thread created by you found on {view.selected.name}")
-                else:
-                    channel = await self.getch_channel(item.thread_id)
-                    if not channel:
-                        await session.delete()
-                        await session.commit()
-                    if channel:
-                        await channel.send(content=f"🔴 Thread closed by **{ctx.author.name}**" , view=CloseModMailView(timeout=None))
-                    await message.edit(view=None , content="Successfully sent request to server moderator to close your thread." )
+            result = await session.execute(select(TicketModel).where(TicketModel.user_id == member.id , TicketModel.guild_id == member.guild.id))
+            ticket = result.scalar_one_or_none()
+            if ticket:
+                channel = self.bot.get_channel(ticket.thread_id)
+                if channel:
+                    await channel.send(content=f"🔒 **{member.name}** left server. Use `/close` to close this thread.")
 
 
 
-    @commands.hybrid_command(name="switch-modmail")
-    @commands.cooldown(1 , 4, commands.BucketType.user)
-    @app_commands.allowed_contexts(guilds=False , dms=True)
-    async def switch_mymodmail(self , ctx : commands.Context["TmrModMail"]) -> None:
-        """Switch to different modmail thread."""   
+     
 
-    @commands.hybrid_command(name="modmail-setup")
-    @commands.cooldown(1 , 4, commands.BucketType.user)
-    @commands.has_guild_permissions(administrator=True)
-    @app_commands.allowed_contexts(dms=False , guilds=True)
-    async def modmail_setup(self , ctx : commands.Context["TmrModMail"] , thread : discord.Thread , staff_role : discord.Role) -> None:
-        """Setup modmail for current server."""
-        await ctx.defer()
-        async with self.bot.db_session() as session:
-            result = await session.execute(select(ModMailModel).where(ModMailModel.id == ctx.guild.id))
-            item = result.scalar_one_or_none()
-            if item:
-                item.thread_id = thread.id
-                item.staff_role = staff_role.id
-                await session.commit()
-                await ctx.reply(content="Successfully updated the old setup data.")
-            else:
-                item = ModMailModel()
-                item.id = ctx.guild.id
-                item.thread_id = thread.id
-                item.staff_role = staff_role.id
-                session.add(item)
-                await session.commit()
-                await ctx.reply(content=f"Successfully setupped modmail in {thread.mention}")
-
-
-    @commands.hybrid_command(name="modmail-toggle")
-    @commands.cooldown(1 , 4, commands.BucketType.user)    
-    @commands.has_guild_permissions(administrator=True)
-    @app_commands.allowed_contexts(guilds=True , dms=False)
-    async def modmail_toggle(self , ctx : commands.Context["TmrModMail"] , toggle : bool ) -> None:
-        """Temporary enabled/disabled modmail thread creation."""
-        await ctx.defer()
-        async with self.bot.db_session() as session:
-            result = await session.execute(select(ModMailModel).where(ModMailModel.id == ctx.guild.id))
-            item = result.scalar_one_or_none()
-            if item:
-                item.enabled = toggle  
-                await session.commit(item)  
-                await ctx.reply(content=f"ModMail has been {'enabled' if toggle is True else 'disabled'}")  
-            else:
-                await ctx.reply(content="Please setup modmail first !")
+    
 
     @commands.hybrid_command(name="close")
     @commands.cooldown(1 , 4, commands.BucketType.user)
@@ -142,26 +95,37 @@ class ModMail(commands.Cog):
         """Close the current modmail ticket."""
         await ctx.defer()
         async with self.bot.db_session() as session:
-            result = await session.execute(select(ModMailModel).where(ModMailModel.id == ctx.guild.id))
-            data = result.scalar_one_or_none()
-            if (not data and not ctx.author.guild_permissions.manage_threads):
-                await ctx.reply(content="You are missing `MANAGE_THREADS` permissions.")
-                return
-            if data.staff_role not in [role.id for role in ctx.author.roles] and not ctx.author.guild_permissions.manage_threads:
-                await ctx.reply(content="You are missing the modmail staff role to close this thread.")
-                return
+            if self.bot.config.staff_role in [r.id for r in ctx.author.roles] or ctx.author.guild_permissions.manage_threads:
 
-            result = await session.execute(select(TicketModel).where(TicketModel.thread_id == ctx.channel.id , TicketModel.guild_id == ctx.guild.id))
-            item = result.scalar_one_or_none()
-            if item:
-                await ctx.reply(content=f"This thread will be closed in a few seconds...")
-                await session.delete(item)
-                await session.commit()
-                if isinstance(ctx.channel , discord.Thread):
-                    await ctx.channel.delete()
+                result = await session.execute(select(TicketModel).where(TicketModel.thread_id == ctx.channel.id , TicketModel.guild_id == ctx.guild.id))
+                item = result.scalar_one_or_none()
+                if item:
+                    await ctx.reply(content=f"This thread will be closed in a few seconds...")
+                    await session.delete(item)
+                    await session.commit()
+                    if isinstance(ctx.channel , discord.Thread):
+                        await ctx.channel.delete()
+                else:
+                    await ctx.reply(content="I looked in the database , this channel is not a modmail thread. I you want to close delete it manually.")
             else:
-                await ctx.reply(content="I looked in the database , this channel is not a modmail thread. I you want to close delete it manually.")
+                embed = discord.Embed(color=discord.Color.red())
+                embed.description = f"You are missing staff role or `manage_threads` permissions to close this thread."
+                await ctx.reply(embed=embed)
 
+
+    @commands.hybrid_command(name="modmail-clear")
+    @commands.cooldown(1 , 4, commands.BucketType.user)
+    @commands.has_guild_permissions(administrator=True)
+    async def modmail_clear(self , ctx : commands.Context["TmrModMail"] , user : discord.User) -> None:
+        """Clear modmail data of a user."""
+        await ctx.defer()
+        async with self.bot.db_session() as session:
+            stmt = delete(TicketModel).where(TicketModel.user_id == user.id , TicketModel.guild_id == ctx.guild.id)
+            await session.execute(stmt)
+            await session.commit()
+        embed = discord.Embed(color=discord.Color.green())
+        embed.description = f"Successfully deleted all modmail data realated to **{user.name}#0**"
+        await ctx.reply(embed=embed)
 
 
     @commands.hybrid_command(name="modmail-blacklist")
@@ -177,7 +141,9 @@ class ModMail(commands.Cog):
                 if item:
                     await session.delete(item)
                     await session.commit()
-                    await ctx.reply(content=f"Successfully unblacklisted {user.name} [ID : {user.id}]")
+                    embed = discord.Embed(color=discord.Color.green())
+                    embed.description = f"Successfully unblacklisted **{user.name}**"
+                    await ctx.reply(embed=embed)
                 else:
                     await ctx.reply(content=f"`{user.name}` , is not blacklisted.")
         else:
@@ -187,25 +153,15 @@ class ModMail(commands.Cog):
                 item.guild_id = ctx.guild.id
                 session.add(item)
                 await session.commit()
-            await ctx.reply(content=f"Successfully blacklisted `{user.name}`")  
+            embed = discord.Embed(color=discord.Color.green())
+            embed.description = f"Successfully blacklisted **{user.name}**"
+            await ctx.reply(embed=embed)
 
-    @commands.hybrid_command(name="modmail-reset")
-    @commands.cooldown(1 , 4, commands.BucketType.user)
-    @commands.has_guild_permissions(administrator=True)
-    async def modmail_reset(self , ctx : commands.Context["TmrModMail"]) -> None:
-        """Reset the modmail setup."""
-        async with self.bot.db_session() as session:
-            result = await session.execute(select(ModMailModel).where(ModMailModel.id == ctx.guild.id))
-            item = result.scalar_one_or_none()     
-            if item:
-                await session.delete(item)
-                await session.commit()
-                await ctx.reply(content="Successfully deleted the modmail setup data.")
-            else:
-                await ctx.reply(content="No setup data found !")         
+         
                         
 
 
 
 
-           
+async def setup(bot : "TmrModMail") -> None:
+    await bot.add_cog(ModMail(bot))           
