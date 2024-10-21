@@ -1,11 +1,17 @@
 [dev]
-token = ""
+token = "MTI0ODU5NTQ3MD******************************************"
 status = ""
-database = "dev.db"
+database = "sqlite+aiosqlite:///dev.db"
 admins = []
+forum_id = 1296799924742262804
+staff_role = 1297167463796051978
+
 
 [prod]
 token = ""
-database = "prod.db"
+database = "sqlite+aiosqlite:///dev.db"
 status = ""
 admins = []
+forum_id = ""
+staff_role = ""
+
