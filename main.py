@@ -3,13 +3,17 @@ import os
 from rich import print
 from config import load_config
 from discord.ext import commands
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING , List
 import discord
 if TYPE_CHECKING:
     from config import BotConfig
 from sqlalchemy.ext.asyncio import async_sessionmaker , create_async_engine , AsyncSession 
 import asyncio   
 from models import Base
+from discord.utils import setup_logging
+
+
+setup_logging(level=20)
 
 
 
@@ -22,11 +26,14 @@ os.environ.setdefault("JISHAKU_FORCE_PAGINATOR", "1")
 class TmrModMail(commands.AutoShardedBot):
     def __init__(self , config : "BotConfig") -> None:
         self._config = config
-        super().__init__(command_prefix=self.__class__.get_prefix , intents=discord.Intents.all() , owner_ids=config.admins , strip_after_prefix = True , case_insensitive=True)
+        super().__init__(command_prefix=self.get_prefix , intents=discord.Intents.all() , owner_ids=config.admins , strip_after_prefix = True , case_insensitive=True)
     
     @property
     def config(self) -> "BotConfig":
         return self._config
+    
+    async def get_prefix(self, message: discord.Message) -> List[str] | str:
+        return commands.when_mentioned (self , message)
     
     async def on_ready(self) -> None:
         print(f"Logged in as {self.user.name} ID : {self.user.id}")
@@ -47,6 +54,7 @@ class TmrModMail(commands.AutoShardedBot):
             await engine.run_sync(Base.metadata.create_all)
 
 async def start_bot(config : "BotConfig") -> None:
+
     async with TmrModMail(config=config) as bot:
         await bot.start(config.token)
 

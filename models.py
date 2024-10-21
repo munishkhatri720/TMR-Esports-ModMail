@@ -15,7 +15,6 @@ class ModMailBlacklist(Base):
 
 class Ticket(Base):
     __tablename__ = "ticket"
-    id : Mapped[int] = mapped_column(Integer , autoincrement=True)
     guild_id : Mapped[int] = mapped_column(Integer , primary_key=True)
     user_id : Mapped[int] = mapped_column(Integer , primary_key=True)
     thread_id : Mapped[int] = mapped_column(Integer , nullable=False)
