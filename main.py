@@ -43,7 +43,7 @@ class TmrModMail(commands.AutoShardedBot):
         
     @tasks.loop(seconds=10)
     async def change_status(self) -> None:
-        await self.change_presence(activity=discord.Game(name=self.config.status))
+        await self.change_presence(activity=discord.Activity(name=self.config.status , type=discord.ActivityType.watching))
 
 
     
