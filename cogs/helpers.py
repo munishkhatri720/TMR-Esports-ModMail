@@ -19,7 +19,7 @@ class ModMailCloseView(discord.ui.View):
                 ticket = result.scalar_one_or_none()
                 if ticket:
                     if isinstance(interaction.channel, discord.Thread):
-                        await interaction.channel.delete()
+                        await interaction.channel.edit(archived=True , name=f"Closed-{interaction.channel.name}" , locked=True)
                         try:
                             u = interaction.client.get_user(ticket.user_id) or await interaction.client.fetch_user(ticket.user_id)
                             await u.send(f"🔒 Your modmail thread has been closed by {interaction.user.mention}.")
