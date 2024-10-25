@@ -93,7 +93,7 @@ class ModMail(commands.Cog):
     @commands.hybrid_command(name="close")
     @commands.cooldown(1 , 4, commands.BucketType.user)
     @app_commands.allowed_contexts(guilds=True , dms=False)
-    async def modmail_close(self , ctx : commands.Context["TmrModMail"] , toggle : bool) -> None:
+    async def modmail_close(self , ctx : commands.Context["TmrModMail"]) -> None:
         """Close the current modmail ticket."""
         await ctx.defer()
         async with self.bot.db_session() as session:
@@ -118,6 +118,7 @@ class ModMail(commands.Cog):
     @commands.hybrid_command(name="modmail-clear")
     @commands.cooldown(1 , 4, commands.BucketType.user)
     @commands.has_guild_permissions(administrator=True)
+    @app_commands.describe(user="User whose modmail data you want to clear.")
     async def modmail_clear(self , ctx : commands.Context["TmrModMail"] , user : discord.User) -> None:
         """Clear modmail data of a user."""
         await ctx.defer()
@@ -133,6 +134,7 @@ class ModMail(commands.Cog):
     @commands.hybrid_command(name="modmail-blacklist")
     @commands.cooldown(1 , 4, commands.BucketType.user)
     @commands.has_guild_permissions(administrator=True)
+    @app_commands.describe(user="User that you want to blacklist/unblacklist.", blacklisted="Want to blacklist ?")
     async def modmail_blacklist(self , ctx : commands.Context["TmrModMail"] , user : discord.User , blacklisted : bool) -> None:
         """Blacklist/Unblacklist a user."""
         await ctx.defer()

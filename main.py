@@ -39,6 +39,7 @@ class TmrModMail(commands.AutoShardedBot):
     
     async def on_ready(self) -> None:
         print(f"Logged in as {self.user.name} ID : {self.user.id}")
+        await self.tree.sync()
         
     @tasks.loop(seconds=10)
     async def change_status(self) -> None:
@@ -49,7 +50,7 @@ class TmrModMail(commands.AutoShardedBot):
     async def setup_hook(self) -> None:
         await self.connect_db()
         self.loop.create_task(self.load_cogs())
-        await self.tree.sync()
+        
         self.change_status.start()
         self.add_view(ModMailOpenView(timeout=None))
         self.add_view(ModMailCloseView(timeout=None))
