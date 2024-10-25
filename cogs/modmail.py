@@ -47,7 +47,8 @@ class ModMail(commands.Cog):
                     channel = self.bot.get_channel(ticket.thread_id)
                     if channel:
                         print("[-] Forwarded user message to the ticket...")
-                        await channel.send(content=f"**{message.author.name} Said:\n**{message.content[:1800]}", file= message.attachments[0].to_file() if message.attachments else None , allowed_mentions=discord.AllowedMentions.none())  
+                        file = await message.attachments[0].to_file() if message.attachments else None
+                        await channel.send(content=f"**💬 {message.author.name} :** {message.content[:1800]}", file= file , allowed_mentions=discord.AllowedMentions.none())  
                 else:
                     print("[-] Send panel to open modmail....")
                     embed = discord.Embed(color=discord.Color.green())
@@ -63,7 +64,8 @@ class ModMail(commands.Cog):
                     user = await self.getch_user(thread.user_id)
                     if user:
                         try:
-                            await user.send(content=f"**{message.guild.name} Staff Response:**\n {message.content[:1800]}" , file= message.attachments[0].to_file() if message.attachments else None)
+                            file = await message.attachments[0].to_file() if message.attachments else None
+                            await user.send(content=f"**{message.guild.name} Staff:** {message.content[:1800]}" , file=file )
                         except discord.Forbidden as e:
                             await message.reply(content=f"🔴 I'm unable to send this message to **{user.name}** : `{e}`")
                     

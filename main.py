@@ -11,6 +11,8 @@ from sqlalchemy.ext.asyncio import async_sessionmaker , create_async_engine , As
 import asyncio   
 from models import Base
 from discord.utils import setup_logging
+from discord.ext import tasks
+from cogs.helpers import ModMailCloseView , ModMailOpenView
 
 
 setup_logging(level=20)
@@ -37,11 +39,21 @@ class TmrModMail(commands.AutoShardedBot):
     
     async def on_ready(self) -> None:
         print(f"Logged in as {self.user.name} ID : {self.user.id}")
-        await self.tree.sync()
+        
+    @tasks.loop(seconds=10)
+    async def change_status(self) -> None:
+        await self.change_presence(activity=discord.Game(name=self.config.status))
+
+
     
     async def setup_hook(self) -> None:
         await self.connect_db()
         self.loop.create_task(self.load_cogs())
+        await self.tree.sync()
+        self.change_status.start()
+        self.add_view(ModMailOpenView(timeout=None))
+        self.add_view(ModMailCloseView(timeout=None))
+
 
     async def load_cogs(self) -> None:
         await self.load_extension('cogs.modmail')

@@ -6,13 +6,41 @@ if TYPE_CHECKING:
 from sqlalchemy import select
 from models import Ticket    
 
+class ModMailCloseView(discord.ui.View):
+    def __init__(self, *, timeout: float | None = 180):
+        super().__init__(timeout=timeout)
+
+    @discord.ui.button(label="Close ModMail Thread" , emoji="🔒" , style=discord.ButtonStyle.red , custom_id="close")
+    async def close_modmail_button(self , interaction : discord.Interaction["TmrModMail"] , button : discord.ui.Button[Any])  -> None:
+        if (not interaction.user.guild_permissions.manage_threads or not interaction.client.config.staff_role in [role.id for role in interaction.user.roles]):
+            await interaction.response.send_message("You don't have permission to close modmail thread." , ephemeral=True)
+            return
+        async with interaction.client.db_session() as session:
+            query = select(Ticket).where(Ticket.thread_id == interaction.channel.id)
+            result = await session.execute(query)
+            ticket = result.scalar_one_or_none()
+            if ticket:
+                if isinstance(interaction.channel, discord.Thread):
+                    await interaction.channel.delete()
+                    try:
+                        u = interaction.client.get_user(ticket.user_id) or await interaction.client.fetch_user(ticket.user_id)
+                        await u.send(f"🔒 Your modmail thread has been closed by {interaction.user.mention}.")
+                    except:
+                        pass
+                    #await interaction.channel.edit(archived=True)
+                await session.delete(ticket)
+                await session.commit()
+            else:
+                await interaction.response.send_message("Failed to close modmail thread, ticket not found in database." , ephemeral=True)
+
 class ModMailOpenView(discord.ui.View):
     def __init__(self, *, timeout: float | None = 180):
         super().__init__(timeout=timeout)
 
-    @discord.ui.button(label="Open ModMail Thread" , emoji="📨" , style=discord.ButtonStyle.red)
+    @discord.ui.button(label="Open ModMail Thread" , emoji="📨" , style=discord.ButtonStyle.red , custom_id="open")
     async def open_modmail_button(self , interaction : discord.Interaction["TmrModMail"] , button : discord.ui.Button[Any])  -> None:
         await interaction.response.send_modal(ModMailModal(title="TMR ModMail" , timeout=90 , custom_id="modal"))
+
 
 class ModMailModal(discord.ui.Modal):
     def __init__(self, *, title: str = ..., timeout: float | None = None, custom_id: str = ...) -> None:
@@ -37,11 +65,9 @@ class ModMailModal(discord.ui.Modal):
                 embed.add_field(name="Reason" , value=topic[:1000] , inline=False)
                 embed.timestamp = discord.utils.utcnow()
                 content=f"<@&{int(interaction.client.config.staff_role)}>"
-                thread_channel = await forum.create_thread(name=f"{interaction.user.name}-modmail" , content=content , embed=embed)
-                embed = discord.Embed(color=discord.Color.green())
-                embed.title = "ModMail Thread Created"
-                embed.description = f"Please wait a few second until our staff will look your ticket . You can type your issue here our staff will review it soon."
-                await interaction.channel.send(embed=embed)
+                thread_channel = await forum.create_thread(name=f"{interaction.user.name}-modmail" , content=content , embed=embed , view=ModMailCloseView(timeout=None))
+                content = "⏳ Opened a modmail thread for you! Wait patiently for our staff to respond, you'll be notified here!"
+                await interaction.channel.send(content=content)
                 await interaction.message.delete()
                 async with interaction.client.db_session() as session:
                     ticket = Ticket()
