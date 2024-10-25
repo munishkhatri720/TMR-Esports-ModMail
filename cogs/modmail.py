@@ -106,7 +106,7 @@ class ModMail(commands.Cog):
                     await session.delete(item)
                     await session.commit()
                     if isinstance(ctx.channel , discord.Thread):
-                        await ctx.channel.edit(archived=True , name=f"Closed-{interaction.channel.name}" , locked=True)
+                        await ctx.channel.edit(archived=True , name=f"Closed-{ctx.channel.name}" , locked=True)
                 else:
                     await ctx.reply(content="I looked in the database , this channel is not a modmail thread. I you want to close delete it manually.")
             else:
